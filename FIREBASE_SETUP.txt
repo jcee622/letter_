@@ -1,0 +1,38 @@
+OPEN WHEN LETTERS - FIREBASE SETUP
+
+1. Go to Firebase Console and create/open a project.
+2. Add a Web App to the project.
+3. Copy the Firebase configuration object shown by Firebase.
+4. Open firebase-config.js and replace every PASTE_... value with your real values.
+5. In Firebase Console, open Firestore Database and create a database.
+6. For a quick test, open Firestore -> Rules and use these TEMPORARY rules:
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /letters/{letterId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
+    }
+  }
+}
+
+7. Publish the rules.
+8. Upload these files to the SAME GitHub Pages repository:
+   - index.html
+   - recipient.html
+   - code.css
+   - js.js
+   - firebase-config.js
+9. Commit/push the changes.
+10. Use the permanent recipient URL:
+    https://YOUR-USERNAME.github.io/YOUR-REPO/recipient.html
+
+After that, posting a letter from index.html saves it to Firestore.
+The recipient page listens for changes and updates automatically on other devices.
+
+SECURITY NOTE:
+The temporary rules above let anyone who can reach your Firestore project create a letter.
+They are fine only for testing. For a safer final version, add Firebase Authentication
+so only your account can create letters while the recipient can still read them.

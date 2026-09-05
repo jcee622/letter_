@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Open When Letters</title>
+    <link rel="stylesheet" href="code.css" />
+  </head>
+  <body>
+    <div class="paper-bg" aria-hidden="true">
+      <span class="heart h1">❤</span>
+      <span class="heart h2">❤</span>
+      <span class="heart h3">❤</span>
+      <span class="heart h4">❤</span>
+      <span class="heart h5">❤</span>
+    </div>
+
+    <main class="app-shell">
+      <header class="intro">
+        <p class="eyebrow">Open When</p>
+        <h1>For My Favorite Person</h1>
+        <p class="subtitle">A little collection of love, comfort, and joy for every moment.</p>
+      </header>
+
+      <section class="letter-builder" aria-label="Write a custom love note">
+        <div class="builder-card">
+          <div class="builder-heading">
+            <span class="builder-badge">New Letter</span>
+            <h2>Create a love note</h2>
+          </div>
+
+          <form id="letterForm">
+            <label class="field-label" for="recipientInput">Who is this for?</label>
+            <input id="recipientInput" type="text" value="My Love" placeholder="My Love" />
+
+            <label class="field-label" for="letterInput">Write Your Message</label>
+            <div class="paper-note">
+              <textarea id="letterInput" rows="12" placeholder="Write your message here..."></textarea>
+            </div>
+
+            <div class="meta-row">
+              <div class="meta-field">
+                <label class="field-label small" for="fromInput">From:</label>
+                <input id="fromInput" type="text" placeholder="Your name" />
+              </div>
+
+              <div class="meta-field">
+                <label class="field-label small" for="occasionInput">Open When:</label>
+                <input id="occasionInput" type="text" placeholder="When you need a smile" />
+              </div>
+            </div>
+
+            <button type="submit" class="seal-button">Seal the Letter 💌</button>
+          </form>
+        </div>
+      </section>
+
+      <div class="page-link-wrap">
+        <a class="page-link" id="recipientPageLink" href="recipient.html">Open the letter page</a>
+      </div>
+
+      <div class="saved-heading">
+        <div>
+          <p class="eyebrow">Your archive</p>
+          <h2>Saved letters</h2>
+        </div>
+        <p id="storageStatus" class="storage-status">Letters will be saved online and shown on the recipient page.</p>
+      </div>
+
+      <section class="letters-grid" id="lettersGrid"></section>
+    </main>
+
+    <script type="module" src="js.js"></script>
+  </body>
+</html>
