@@ -1,6 +1,11 @@
 const STORAGE_KEY = 'open-when-letters-v1';
 const DRAFT_KEY = 'open-when-letter-draft-v1';
 const isRecipientPage = document.body.dataset.page === 'recipient';
+let firebaseSdk = null;
+let currentUser = null;
+let cloudReady = false;
+let activeLetters = [];
+let unsubscribeLetters = null;
 
 function generateLetterId() {
   if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -12,21 +17,21 @@ function generateLetterId() {
 
 const defaultLetters = [
   {
-    id: generateLetterId(),
+    id: 'default-miss-you',
     recipient: 'You Miss Me',
     sender: 'Your person',
     occasion: 'Open when',
     message: 'When you miss me, I hope this letter reminds you that I am still here, in every warm thought, every quiet smile, and every place your heart reaches for mine. No matter how far apart we are, I am carrying you with me — in my heart, in my dreams, and in all the little moments that feel like home when you are near.'
   },
   {
-    id: generateLetterId(),
+    id: 'default-need-a-smile',
     recipient: 'You Need a Smile',
     sender: 'Your favorite person',
     occasion: 'Open when',
     message: 'I hope this is the little reminder you needed: you are loved more than you know, and there is a softness in your soul that makes the world brighter just by being in it. Smile, even if it is tiny. A smile is still a little spark of light, and you are the kind of light that makes other people feel less alone.'
   },
   {
-    id: generateLetterId(),
+    id: 'default-feel-sad',
     recipient: 'You Feel Sad',
     sender: 'The one who loves you most',
     occasion: 'Open when',
@@ -42,6 +47,11 @@ const occasionInput = document.getElementById('occasionInput');
 const lettersGrid = document.getElementById('lettersGrid');
 const storageStatus = document.getElementById('storageStatus');
 const recipientPageLink = document.getElementById('recipientPageLink');
+const authStatus = document.getElementById('authStatus');
+const authError = document.getElementById('authError');
+const accountEmail = document.getElementById('accountEmail');
+const signInButton = document.getElementById('signInButton');
+const signOutButton = document.getElementById('signOutButton');
 
 function resizeMessageBox() {
   if (!letterInput) return;
@@ -97,10 +107,6 @@ function getSharedLetter() {
     console.warn('Could not read shared letter:', error);
     return null;
   }
-}
-
-function saveLetters(letters) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeLetters(letters)));
 }
 
 function getShareUrl(letter) {
@@ -314,10 +320,184 @@ async function renderLetters() {
   const letters = sharedLetters?.length
     ? sharedLetters
     : (sharedLetter ? [sharedLetter] : getStoredLetters());
+  renderLetterCards(letters);
+}
+
+function renderLetterCards(letters) {
   lettersGrid.innerHTML = '';
 
   letters.forEach((letter) => {
     lettersGrid.appendChild(buildLetterCard(letter));
+  });
+}
+
+function updateRecipientPageLink(letters) {
+  if (!recipientPageLink || !letters.length) return;
+
+  getLettersShareUrl(letters)
+    .then((shareUrl) => {
+      recipientPageLink.href = shareUrl;
+    })
+    .catch((error) => {
+      console.error('Could not create the recipient page link:', error);
+      if (storageStatus) storageStatus.textContent = 'Letters are saved, but the recipient link could not be created.';
+    });
+}
+
+function setAuthError(message) {
+  if (!authError) return;
+  authError.textContent = message;
+  authError.hidden = !message;
+}
+
+function setAuthStatus(message) {
+  if (authStatus) authStatus.textContent = message;
+}
+
+function lettersCollection(uid) {
+  return firebaseSdk.collection(firebaseSdk.db, 'users', uid, 'letters');
+}
+
+function sortLetters(letters) {
+  return letters.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
+}
+
+async function writeInitialLetters(uid, letters) {
+  const batch = firebaseSdk.writeBatch(firebaseSdk.db);
+  letters.forEach((letter) => {
+    batch.set(firebaseSdk.doc(firebaseSdk.db, 'users', uid, 'letters', letter.id), {
+      ...letter,
+      createdAt: firebaseSdk.serverTimestamp()
+    });
+  });
+  await batch.commit();
+}
+
+async function loadUserLetters(user) {
+  cloudReady = false;
+  setAuthError('');
+  setAuthStatus('Loading your letters from Firebase...');
+
+  try {
+    const collectionRef = lettersCollection(user.uid);
+    const snapshot = await firebaseSdk.getDocs(collectionRef);
+    if (currentUser?.uid !== user.uid) return;
+
+    if (snapshot.empty) {
+      const localLetters = getStoredLetters();
+      await writeInitialLetters(user.uid, localLetters);
+      localStorage.removeItem(STORAGE_KEY);
+    } else {
+      const savedLetters = snapshot.docs.map((item) => ({
+        ...item.data(),
+        id: item.id
+      }));
+      const missingDefaults = defaultLetters.filter((defaultLetter) => (
+        !savedLetters.some((letter) => letter.recipient === defaultLetter.recipient)
+      ));
+      if (missingDefaults.length) {
+        await writeInitialLetters(user.uid, normalizeLetters(missingDefaults));
+      }
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    if (currentUser?.uid !== user.uid) return;
+    unsubscribeLetters = firebaseSdk.onSnapshot(collectionRef, (updatedSnapshot) => {
+      activeLetters = sortLetters(updatedSnapshot.docs.map((item) => ({
+        ...item.data(),
+        id: item.id
+      })));
+      cloudReady = true;
+      renderLetterCards(activeLetters);
+      updateRecipientPageLink(activeLetters);
+      setAuthStatus(`Signed in as ${user.email}. Your letters sync with Firebase.`);
+      if (storageStatus) {
+        storageStatus.textContent = 'Letters are saved in your Firebase account and sync across your devices.';
+      }
+    }, (error) => {
+      cloudReady = false;
+      setAuthStatus('Firebase could not load your letters.');
+      setAuthError(error.message);
+    });
+  } catch (error) {
+    cloudReady = false;
+    setAuthStatus('Firebase could not load your letters.');
+    setAuthError(error.message);
+  }
+}
+
+async function initializeFirebase() {
+  try {
+    firebaseSdk = await import('./firebase.js');
+    if (signInButton) signInButton.disabled = false;
+    firebaseSdk.onAuthStateChanged(firebaseSdk.auth, (user) => {
+      if (unsubscribeLetters) {
+        unsubscribeLetters();
+        unsubscribeLetters = null;
+      }
+      currentUser = user;
+      cloudReady = false;
+      if (signInButton) signInButton.hidden = Boolean(user);
+      if (signOutButton) signOutButton.hidden = !user;
+      if (accountEmail) {
+        accountEmail.hidden = !user;
+        accountEmail.textContent = user ? user.email : '';
+      }
+
+      if (!user) {
+        activeLetters = getStoredLetters();
+        renderLetterCards(activeLetters);
+        updateRecipientPageLink(activeLetters);
+        setAuthStatus('Sign in with Google to sync your letters across devices.');
+        if (storageStatus) {
+          storageStatus.textContent = 'Sign in with Google to save letters to Firebase and sync them across devices.';
+        }
+        return;
+      }
+
+      loadUserLetters(user);
+    }, (error) => {
+      setAuthStatus('Firebase authentication could not be initialized.');
+      setAuthError(error.message);
+    });
+  } catch (error) {
+    setAuthStatus('Firebase could not be initialized.');
+    setAuthError(error.message);
+  }
+}
+
+if (signInButton) {
+  signInButton.addEventListener('click', async () => {
+    setAuthError('');
+    signInButton.disabled = true;
+    try {
+      await firebaseSdk.signInWithPopup(
+        firebaseSdk.auth,
+        new firebaseSdk.GoogleAuthProvider()
+      );
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      signInButton.disabled = false;
+    }
+  });
+}
+
+if (signOutButton) {
+  signOutButton.addEventListener('click', async () => {
+    setAuthError('');
+    signOutButton.disabled = true;
+    try {
+      await firebaseSdk.signOut(firebaseSdk.auth);
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      signOutButton.disabled = false;
+    }
   });
 }
 
@@ -327,8 +507,13 @@ if (letterForm) {
     saveDraft();
   });
 
-  letterForm.addEventListener('submit', (event) => {
+  letterForm.addEventListener('submit', async (event) => {
     event.preventDefault();
+
+    if (!currentUser || !cloudReady) {
+      setAuthStatus('Sign in with Google and wait for your letters to load before saving.');
+      return;
+    }
 
     const recipient = recipientInput.value.trim();
     const message = letterInput.value.trim();
@@ -343,36 +528,37 @@ if (letterForm) {
       message: message || 'I love you more than words could ever say.'
     };
 
-    const currentLetters = getStoredLetters();
-    currentLetters.unshift(newLetter);
-    saveLetters(currentLetters);
-    localStorage.removeItem(DRAFT_KEY);
-    if (recipientPageLink) {
-      getLettersShareUrl(currentLetters).then((shareUrl) => {
-        recipientPageLink.href = shareUrl;
-      });
+    const submitButton = letterForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      await firebaseSdk.setDoc(
+        firebaseSdk.doc(firebaseSdk.db, 'users', currentUser.uid, 'letters', newLetter.id),
+        { ...newLetter, createdAt: firebaseSdk.serverTimestamp() }
+      );
+      localStorage.removeItem(DRAFT_KEY);
+      if (storageStatus) storageStatus.textContent = 'Saved to Firebase. Use Copy Link to share a letter.';
+      letterForm.reset();
+      recipientInput.value = 'My Love';
+      letterInput.value = '';
+      fromInput.value = '';
+      occasionInput.value = '';
+      resizeMessageBox();
+    } catch (error) {
+      setAuthError(`Could not save your letter: ${error.message}`);
+    } finally {
+      submitButton.disabled = false;
     }
-    if (storageStatus) storageStatus.textContent = 'Saved here. Use Copy Link to open this letter on another device.';
-    renderLetters();
-
-    letterForm.reset();
-    recipientInput.value = 'My Love';
-    letterInput.value = '';
-    fromInput.value = '';
-    occasionInput.value = '';
-    resizeMessageBox();
   });
 }
 
-renderLetters();
+if (isRecipientPage) {
+  renderLetters();
+} else {
+  activeLetters = getStoredLetters();
+  renderLetterCards(activeLetters);
+  updateRecipientPageLink(activeLetters);
+}
 restoreDraft();
 resizeMessageBox();
 
-if (recipientPageLink) {
-  const savedLetters = getStoredLetters();
-  if (savedLetters.length) {
-    getLettersShareUrl(savedLetters).then((shareUrl) => {
-      recipientPageLink.href = shareUrl;
-    });
-  }
-}
+if (!isRecipientPage) initializeFirebase();

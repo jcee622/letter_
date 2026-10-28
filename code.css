@@ -288,6 +288,57 @@ body {
   font-size: 0.85rem;
 }
 
+.account-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 22px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 250, 246, 0.72);
+}
+
+.account-panel .storage-status {
+  margin: 0;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.account-email {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.account-button {
+  border: 1px solid rgba(122, 45, 77, 0.2);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--rose-dark);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-button:hover {
+  background: rgba(200, 95, 138, 0.1);
+}
+
+.auth-error {
+  margin: 8px 0 0;
+  color: #9c2f46;
+  font-size: 0.85rem;
+}
+
 
 .letters-grid {
   display: grid;
@@ -481,6 +532,16 @@ body {
 }
 
 @media (max-width: 600px) {
+  .account-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .account-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
   .envelope {
     height: 240px;
   }
