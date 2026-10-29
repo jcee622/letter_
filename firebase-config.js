@@ -1,6 +1,6 @@
 // Firebase Web App configuration for the Open When Letters site.
 export const firebaseConfig = {
-  apiKey: "AIzaSyC7vpHLps98cKuhHs6HCxX1QW9UaLZhWAE",
+  apiKey: "AIzaSyC7vpHLps98cKuhHs6HCxX1QW9UalZhWAE",
   authDomain: "open-when-letters-a64ec.firebaseapp.com",
   projectId: "open-when-letters-a64ec",
   storageBucket: "open-when-letters-a64ec.firebasestorage.app",

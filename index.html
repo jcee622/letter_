@@ -22,6 +22,18 @@
         <p class="subtitle">A little collection of love, comfort, and joy for every moment.</p>
       </header>
 
+      <section class="account-panel" aria-label="Firebase account">
+        <div>
+          <p id="authStatus" class="storage-status" aria-live="polite">Sign in with Google to sync your letters across devices.</p>
+          <p id="authError" class="auth-error" role="alert" hidden></p>
+        </div>
+        <div class="account-actions">
+          <span id="accountEmail" class="account-email" hidden></span>
+          <button type="button" class="account-button" id="signInButton" disabled>Sign in with Google</button>
+          <button type="button" class="account-button" id="signOutButton" hidden>Sign out</button>
+        </div>
+      </section>
+
       <section class="letter-builder" aria-label="Write a custom love note">
         <div class="builder-card">
           <div class="builder-heading">
@@ -64,12 +76,12 @@
           <p class="eyebrow">Your archive</p>
           <h2>Saved letters</h2>
         </div>
-        <p id="storageStatus" class="storage-status">Letters will be saved online and shown on the recipient page.</p>
+        <p id="storageStatus" class="storage-status">Letters are saved on this device. Use Copy Link to open one elsewhere.</p>
       </div>
 
       <section class="letters-grid" id="lettersGrid"></section>
     </main>
 
-    <script type="module" src="js.js"></script>
+    <script src="js.js"></script>
   </body>
 </html>
