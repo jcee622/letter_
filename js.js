@@ -125,7 +125,9 @@ function restoreDraft() {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
     if (!draft) return;
 
-    recipientInput.value = draft.recipient || 'My Love';
+    recipientInput.value = draft.recipient && draft.recipient !== 'My Love'
+      ? draft.recipient
+      : 'Boss';
     letterInput.value = draft.message || '';
     fromInput.value = draft.sender || '';
     occasionInput.value = draft.occasion || '';
@@ -209,7 +211,7 @@ function buildLetterCard(letter) {
   card.className = 'letter-card';
   card.dataset.letterId = letter.id;
 
-  const safeRecipient = (letter.recipient || 'My Love').trim() || 'My Love';
+  const safeRecipient = (letter.recipient || 'Boss').trim() || 'Boss';
   const safeSender = (letter.sender || 'Your person').trim() || 'Your person';
   const safeOccasion = (letter.occasion || 'Open when').trim() || 'Open when';
   const safeMessage = (letter.message || 'I love you more than words could ever say.').trim() || 'I love you more than words could ever say.';
@@ -393,7 +395,7 @@ if (letterForm) {
     }
 
     const newLetter = {
-      recipient: recipientInput.value.trim() || 'My Love',
+      recipient: recipientInput.value.trim() || 'Boss',
       sender: fromInput.value.trim() || 'Your person',
       occasion: occasionInput.value.trim() || 'Open when',
       message: letterInput.value.trim() || 'I love you more than words could ever say.'
@@ -411,7 +413,7 @@ if (letterForm) {
       localStorage.removeItem(DRAFT_KEY);
       if (storageStatus) storageStatus.textContent = 'Saved online. It now shows on the recipient page.';
       letterForm.reset();
-      recipientInput.value = 'My Love';
+      recipientInput.value = 'Boss';
       letterInput.value = '';
       fromInput.value = '';
       occasionInput.value = '';
