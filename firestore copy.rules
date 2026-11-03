@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Letters are public to read (the recipient page needs them),
+    // but only the site owner can add, edit or delete them.
+    match /letters/{letterId} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.token.email_verified == true
+                   && request.auth.token.email == 'johncedrickeugenio@gmail.com';
+    }
+  }
+}

@@ -14,6 +14,6 @@ URL; they do not grant access to the private Firestore collection.
 5. Serve the project from a local web server or deploy it to a web host. ES
    modules and Google sign-in do not work reliably from a `file://` URL.
 
-The Firebase web-app config is in `firebase.js`. Firebase client config is
+The Firebase web-app config is in `firebase-config.js`. Firebase client config is
 included in browser code by design; Firestore access is restricted by the
 owner-only rules above.

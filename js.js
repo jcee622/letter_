@@ -1,10 +1,7 @@
-const STORAGE_KEY = 'open-when-letters-v1';
 const DRAFT_KEY = 'open-when-letter-draft-v1';
 const isRecipientPage = document.body.dataset.page === 'recipient';
 let firebaseSdk = null;
 let currentUser = null;
-let cloudReady = false;
-let activeLetters = [];
 let unsubscribeLetters = null;
 
 function generateLetterId() {
@@ -14,30 +11,6 @@ function generateLetterId() {
 
   return `letter-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
-
-const defaultLetters = [
-  {
-    id: 'default-miss-you',
-    recipient: 'You Miss Me',
-    sender: 'Your person',
-    occasion: 'Open when',
-    message: 'When you miss me, I hope this letter reminds you that I am still here, in every warm thought, every quiet smile, and every place your heart reaches for mine. No matter how far apart we are, I am carrying you with me — in my heart, in my dreams, and in all the little moments that feel like home when you are near.'
-  },
-  {
-    id: 'default-need-a-smile',
-    recipient: 'You Need a Smile',
-    sender: 'Your favorite person',
-    occasion: 'Open when',
-    message: 'I hope this is the little reminder you needed: you are loved more than you know, and there is a softness in your soul that makes the world brighter just by being in it. Smile, even if it is tiny. A smile is still a little spark of light, and you are the kind of light that makes other people feel less alone.'
-  },
-  {
-    id: 'default-feel-sad',
-    recipient: 'You Feel Sad',
-    sender: 'The one who loves you most',
-    occasion: 'Open when',
-    message: 'It is okay to feel sad sometimes. Even the strongest hearts need rest and gentleness. I hope you remember that you are never too much, never too difficult, and never alone. I will always be here, loving you in the quiet ways and the loudest ways, holding space for your feelings and cheering for your healing every day.'
-  }
-];
 
 const letterForm = document.getElementById('letterForm');
 const recipientInput = document.getElementById('recipientInput');
@@ -71,31 +44,6 @@ function normalizeLetters(list) {
   }));
 }
 
-function getStoredLetters() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length) {
-        const storedLetters = normalizeLetters(parsed);
-        const missingDefaults = defaultLetters.filter((defaultLetter) => (
-          !storedLetters.some((letter) => letter.recipient === defaultLetter.recipient)
-        ));
-        const letters = [...storedLetters, ...normalizeLetters(missingDefaults)];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(letters));
-        return letters;
-      }
-    } catch (error) {
-      console.warn('Could not read saved letters:', error);
-    }
-  }
-
-  const letters = normalizeLetters(defaultLetters);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(letters));
-  return letters;
-}
-
 function getSharedLetter() {
   const encodedLetter = new URLSearchParams(window.location.search).get('letter');
 
@@ -111,19 +59,13 @@ function getSharedLetter() {
 
 function getShareUrl(letter) {
   const sharePath = window.location.pathname.replace(/[^/]*$/, 'recipient.html');
-  return `${window.location.origin}${sharePath}?letter=${encodeURIComponent(JSON.stringify(letter))}`;
-}
-
-async function compressText(text) {
-  if (!('CompressionStream' in window)) return text;
-
-  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate'));
-  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-  let binary = '';
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const plainLetter = {
+    recipient: letter.recipient,
+    sender: letter.sender,
+    occasion: letter.occasion,
+    message: letter.message
+  };
+  return `${window.location.origin}${sharePath}?letter=${encodeURIComponent(JSON.stringify(plainLetter))}`;
 }
 
 async function decompressText(encodedText) {
@@ -133,23 +75,6 @@ async function decompressText(encodedText) {
   const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
   return new Response(stream).text();
-}
-
-async function getLettersShareUrl(letters) {
-  const sharePath = window.location.pathname.replace(/[^/]*$/, 'recipient.html');
-  const compactLetters = letters.map((letter) => [
-    letter.recipient,
-    letter.sender,
-    letter.occasion,
-    letter.message
-  ]);
-  let encodedLetters;
-  try {
-    encodedLetters = await compressText(JSON.stringify(compactLetters));
-  } catch (error) {
-    encodedLetters = JSON.stringify(compactLetters);
-  }
-  return `${window.location.origin}${sharePath}?letters=${encodeURIComponent(encodedLetters)}`;
 }
 
 async function getSharedLetters() {
@@ -314,34 +239,12 @@ function buildLetterCard(letter) {
   return card;
 }
 
-async function renderLetters() {
-  const sharedLetter = isRecipientPage ? getSharedLetter() : null;
-  const sharedLetters = isRecipientPage ? await getSharedLetters() : null;
-  const letters = sharedLetters?.length
-    ? sharedLetters
-    : (sharedLetter ? [sharedLetter] : getStoredLetters());
-  renderLetterCards(letters);
-}
-
 function renderLetterCards(letters) {
   lettersGrid.innerHTML = '';
 
   letters.forEach((letter) => {
     lettersGrid.appendChild(buildLetterCard(letter));
   });
-}
-
-function updateRecipientPageLink(letters) {
-  if (!recipientPageLink || !letters.length) return;
-
-  getLettersShareUrl(letters)
-    .then((shareUrl) => {
-      recipientPageLink.href = shareUrl;
-    })
-    .catch((error) => {
-      console.error('Could not create the recipient page link:', error);
-      if (storageStatus) storageStatus.textContent = 'Letters are saved, but the recipient link could not be created.';
-    });
 }
 
 function setAuthError(message) {
@@ -354,8 +257,12 @@ function setAuthStatus(message) {
   if (authStatus) authStatus.textContent = message;
 }
 
-function lettersCollection(uid) {
-  return firebaseSdk.collection(firebaseSdk.db, 'users', uid, 'letters');
+function showGridMessage(message) {
+  lettersGrid.innerHTML = `<p class="storage-status">${escapeHtml(message)}</p>`;
+}
+
+function lettersCollection() {
+  return firebaseSdk.collection(firebaseSdk.db, 'letters');
 }
 
 function sortLetters(letters) {
@@ -366,108 +273,78 @@ function sortLetters(letters) {
   });
 }
 
-async function writeInitialLetters(uid, letters) {
-  const batch = firebaseSdk.writeBatch(firebaseSdk.db);
-  letters.forEach((letter) => {
-    batch.set(firebaseSdk.doc(firebaseSdk.db, 'users', uid, 'letters', letter.id), {
-      ...letter,
-      createdAt: firebaseSdk.serverTimestamp()
-    });
-  });
-  await batch.commit();
-}
+function startLettersListener() {
+  if (unsubscribeLetters) unsubscribeLetters();
 
-async function loadUserLetters(user) {
-  cloudReady = false;
-  setAuthError('');
-  setAuthStatus('Loading your letters from Firebase...');
+  unsubscribeLetters = firebaseSdk.onSnapshot(lettersCollection(), (snapshot) => {
+    const letters = sortLetters(snapshot.docs.map((item) => ({
+      ...item.data(),
+      id: item.id
+    })));
 
-  try {
-    const collectionRef = lettersCollection(user.uid);
-    const snapshot = await firebaseSdk.getDocs(collectionRef);
-    if (currentUser?.uid !== user.uid) return;
-
-    if (snapshot.empty) {
-      const localLetters = getStoredLetters();
-      await writeInitialLetters(user.uid, localLetters);
-      localStorage.removeItem(STORAGE_KEY);
+    if (!letters.length) {
+      showGridMessage('No letters yet.');
     } else {
-      const savedLetters = snapshot.docs.map((item) => ({
-        ...item.data(),
-        id: item.id
-      }));
-      const missingDefaults = defaultLetters.filter((defaultLetter) => (
-        !savedLetters.some((letter) => letter.recipient === defaultLetter.recipient)
-      ));
-      if (missingDefaults.length) {
-        await writeInitialLetters(user.uid, normalizeLetters(missingDefaults));
-      }
-      localStorage.removeItem(STORAGE_KEY);
+      renderLetterCards(normalizeLetters(letters));
     }
 
-    if (currentUser?.uid !== user.uid) return;
-    unsubscribeLetters = firebaseSdk.onSnapshot(collectionRef, (updatedSnapshot) => {
-      activeLetters = sortLetters(updatedSnapshot.docs.map((item) => ({
-        ...item.data(),
-        id: item.id
-      })));
-      cloudReady = true;
-      renderLetterCards(activeLetters);
-      updateRecipientPageLink(activeLetters);
-      setAuthStatus(`Signed in as ${user.email}. Your letters sync with Firebase.`);
-      if (storageStatus) {
-        storageStatus.textContent = 'Letters are saved in your Firebase account and sync across your devices.';
-      }
-    }, (error) => {
-      cloudReady = false;
-      setAuthStatus('Firebase could not load your letters.');
-      setAuthError(error.message);
-    });
-  } catch (error) {
-    cloudReady = false;
-    setAuthStatus('Firebase could not load your letters.');
+    if (storageStatus) {
+      storageStatus.textContent = 'Letters are saved online and shown on the recipient page.';
+    }
+  }, (error) => {
+    console.error('Could not load letters:', error);
+    showGridMessage('The letters could not be loaded right now.');
+    setAuthError(`Firebase error: ${error.message}`);
+  });
+}
+
+function setupAuth() {
+  if (signInButton) signInButton.disabled = false;
+
+  firebaseSdk.onAuthStateChanged(firebaseSdk.auth, (user) => {
+    currentUser = user;
+    if (signInButton) signInButton.hidden = Boolean(user);
+    if (signOutButton) signOutButton.hidden = !user;
+    if (accountEmail) {
+      accountEmail.hidden = !user;
+      accountEmail.textContent = user ? user.email : '';
+    }
+    setAuthStatus(user
+      ? `Signed in as ${user.email}. You can add new letters.`
+      : 'Sign in with Google to add new letters.');
+  }, (error) => {
+    setAuthStatus('Firebase authentication could not be initialized.');
     setAuthError(error.message);
-  }
+  });
 }
 
 async function initializeFirebase() {
   try {
     firebaseSdk = await import('./firebase.js');
-    if (signInButton) signInButton.disabled = false;
-    firebaseSdk.onAuthStateChanged(firebaseSdk.auth, (user) => {
-      if (unsubscribeLetters) {
-        unsubscribeLetters();
-        unsubscribeLetters = null;
-      }
-      currentUser = user;
-      cloudReady = false;
-      if (signInButton) signInButton.hidden = Boolean(user);
-      if (signOutButton) signOutButton.hidden = !user;
-      if (accountEmail) {
-        accountEmail.hidden = !user;
-        accountEmail.textContent = user ? user.email : '';
-      }
-
-      if (!user) {
-        activeLetters = getStoredLetters();
-        renderLetterCards(activeLetters);
-        updateRecipientPageLink(activeLetters);
-        setAuthStatus('Sign in with Google to sync your letters across devices.');
-        if (storageStatus) {
-          storageStatus.textContent = 'Sign in with Google to save letters to Firebase and sync them across devices.';
-        }
-        return;
-      }
-
-      loadUserLetters(user);
-    }, (error) => {
-      setAuthStatus('Firebase authentication could not be initialized.');
-      setAuthError(error.message);
-    });
   } catch (error) {
+    console.error('Firebase could not be initialized:', error);
+    showGridMessage('Firebase could not be loaded.');
     setAuthStatus('Firebase could not be initialized.');
     setAuthError(error.message);
+    return;
   }
+
+  startLettersListener();
+  if (!isRecipientPage) setupAuth();
+}
+
+async function renderLetters() {
+  const sharedLetter = getSharedLetter();
+  const sharedLetters = await getSharedLetters();
+  const linkLetters = sharedLetters?.length ? sharedLetters : (sharedLetter ? [sharedLetter] : null);
+
+  if (linkLetters) {
+    renderLetterCards(linkLetters);
+    return;
+  }
+
+  showGridMessage('Loading letters...');
+  initializeFirebase();
 }
 
 if (signInButton) {
@@ -510,33 +387,29 @@ if (letterForm) {
   letterForm.addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    if (!currentUser || !cloudReady) {
-      setAuthStatus('Sign in with Google and wait for your letters to load before saving.');
+    if (!currentUser) {
+      setAuthStatus('Sign in with Google before saving a letter.');
       return;
     }
 
-    const recipient = recipientInput.value.trim();
-    const message = letterInput.value.trim();
-    const sender = fromInput.value.trim();
-    const occasion = occasionInput.value.trim();
-
     const newLetter = {
-      id: generateLetterId(),
-      recipient: recipient || 'My Love',
-      sender: sender || 'Your person',
-      occasion: occasion || 'Open when',
-      message: message || 'I love you more than words could ever say.'
+      recipient: recipientInput.value.trim() || 'My Love',
+      sender: fromInput.value.trim() || 'Your person',
+      occasion: occasionInput.value.trim() || 'Open when',
+      message: letterInput.value.trim() || 'I love you more than words could ever say.'
     };
+    const newId = generateLetterId();
 
     const submitButton = letterForm.querySelector('button[type="submit"]');
     submitButton.disabled = true;
+    setAuthError('');
     try {
       await firebaseSdk.setDoc(
-        firebaseSdk.doc(firebaseSdk.db, 'users', currentUser.uid, 'letters', newLetter.id),
+        firebaseSdk.doc(firebaseSdk.db, 'letters', newId),
         { ...newLetter, createdAt: firebaseSdk.serverTimestamp() }
       );
       localStorage.removeItem(DRAFT_KEY);
-      if (storageStatus) storageStatus.textContent = 'Saved to Firebase. Use Copy Link to share a letter.';
+      if (storageStatus) storageStatus.textContent = 'Saved online. It now shows on the recipient page.';
       letterForm.reset();
       recipientInput.value = 'My Love';
       letterInput.value = '';
@@ -551,14 +424,12 @@ if (letterForm) {
   });
 }
 
-if (isRecipientPage) {
-  renderLetters();
-} else {
-  activeLetters = getStoredLetters();
-  renderLetterCards(activeLetters);
-  updateRecipientPageLink(activeLetters);
-}
 restoreDraft();
 resizeMessageBox();
 
-if (!isRecipientPage) initializeFirebase();
+if (isRecipientPage) {
+  renderLetters();
+} else {
+  showGridMessage('Loading letters...');
+  initializeFirebase();
+}
